@@ -14,7 +14,8 @@ export type DuelistStateId =
   'idle' | 'approach' | 'attack' | 'recoil' | 'blockstun' | 'hitstun' | 'broken' | 'dying' | 'dead';
 
 export interface DuelistCallbacks {
-  onSwingStart(attack: AttackDef, tick: number): void;
+  /** `ticksToActive`: cuanto falta para el primer tick activo (incluye el rebote). */
+  onSwingStart(attack: AttackDef, tick: number, ticksToActive: number): void;
   onTelegraph(attack: AttackDef, tick: number, ticksToImpact: number): void;
   onRespawn(tick: number): void;
 }
@@ -46,6 +47,10 @@ export interface DuelistContext {
   blocksInARow: number;
   /** Ultimo resultado de un ataque propio desviado (para elegir animacion). */
   deflectedCount: number;
+  /** Rebote con el que empezo el golpe actual (0 si no venia de un deflect). */
+  bounceTicks: number;
+  /** Direccion del ultimo golpe propio que fue desviado (elige el rebote). */
+  lastDeflectedStrike: AttackDef['strike'];
 
   velocity: { x: number; z: number };
   /** Misma velocidad en 3D (para la animacion secundaria). */
@@ -85,6 +90,8 @@ export function createDuelistContext(
     pauseTicks: 40,
     blocksInARow: 0,
     deflectedCount: 0,
+    bounceTicks: 0,
+    lastDeflectedStrike: 'from_right',
     velocity: { x: 0, z: 0 },
     velocity3: { x: 0, y: 0, z: 0 },
     knockback: { x: 0, z: 0 },
@@ -101,22 +108,27 @@ function currentStep(ctx: DuelistContext): PatternStep | null {
   return ctx.pattern[ctx.patternIndex % ctx.pattern.length] ?? null;
 }
 
-export function beginAttack(ctx: DuelistContext, attack: AttackDef): void {
+export function beginAttack(ctx: DuelistContext, attack: AttackDef, bounceTicks = 0): void {
   ctx.attack = attack;
-  ctx.attackTicks = 0;
+  ctx.attackTicks = -bounceTicks;
+  ctx.bounceTicks = bounceTicks;
   ctx.swingId += 1;
   ctx.telegraphed = false;
-  ctx.callbacks.onSwingStart(attack, ctx.tick);
+  ctx.callbacks.onSwingStart(attack, ctx.tick, attack.startupTicks + bounceTicks);
 }
 
-/** ¿Queda otro golpe en el combo actual? Si si, lo empieza y devuelve true. */
-export function continueCombo(ctx: DuelistContext): boolean {
+/**
+ * ¿Queda otro golpe en el combo actual? Si si, lo empieza y devuelve true.
+ * @param bounceTicks rebote previo (tras un deflect): el golpe arranca con `attackTicks`
+ *   negativo, asi que su startup se alarga exactamente ese numero de ticks.
+ */
+export function continueCombo(ctx: DuelistContext, bounceTicks = 0): boolean {
   const step = currentStep(ctx);
   if (!step) return false;
   const nextId = step.attacks[ctx.stepAttackIndex + 1];
   if (!nextId) return false;
   ctx.stepAttackIndex += 1;
-  beginAttack(ctx, DUMMY_ATTACKS[nextId]);
+  beginAttack(ctx, DUMMY_ATTACKS[nextId], bounceTicks);
   return true;
 }
 

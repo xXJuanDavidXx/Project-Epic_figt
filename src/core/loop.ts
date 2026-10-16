@@ -1,4 +1,5 @@
 import { FIXED_DELTA, simConfig } from '@/config/sim';
+import { timeDirector } from '@/core/timeDirector';
 
 /** Contexto de un paso de simulacion de duracion fija. */
 export interface TickContext {
@@ -247,6 +248,7 @@ export class GameLoop {
     const frameDelta = this.skipNextDelta ? 0 : (timeMs - this.lastTimeMs) / 1000;
     this.skipNextDelta = false;
     this.lastTimeMs = timeMs;
+    if (!this.pinned.timeScale) timeDirector.update(Math.min(frameDelta, simConfig.maxFrameDelta));
 
     this.syncLiveConfig();
 
@@ -284,7 +286,7 @@ export class GameLoop {
 
   /** Recoge los valores tuneados en caliente desde lil-gui. */
   private syncLiveConfig(): void {
-    if (!this.pinned.timeScale) this.clock.timeScale = simConfig.timeScale;
+    if (!this.pinned.timeScale) this.clock.timeScale = simConfig.timeScale * timeDirector.scale;
     if (!this.pinned.maxSubSteps) this.clock.maxSubSteps = simConfig.maxSubSteps;
     if (!this.pinned.maxFrameDelta) this.clock.maxFrameDelta = simConfig.maxFrameDelta;
   }

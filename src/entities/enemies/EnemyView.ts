@@ -5,20 +5,26 @@ import { DUELIST_CLIPS } from '@/animation/clips/duelist';
 import type { DuelistClipId } from '@/animation/clips/duelist';
 import { enemyConfig } from '@/config/enemy';
 import type { FixedUpdateSystem, FrameContext, RenderUpdateSystem } from '@/core/loop';
+import type { StrikeDirection } from '@/combat/types';
 import type { EnemyDuelist } from '@/entities/enemies/EnemyDuelist';
 import type { DuelistStateId } from '@/entities/enemies/duelistStates';
 import { buildHumanoid } from '@/render/character/humanoid';
 import type { HumanoidRig } from '@/render/character/humanoid';
 import { updateTrail } from '@/render/character/secondary';
 
-/** Presentacion del duelista: solo lee el estado del controller. */
+/**
+ * Presentacion del duelista: solo lee el estado del controller.
+ *
+ * Reglas de corte (estilo staccato): las reacciones entran con corte seco (fade 0); solo
+ * los enlaces entre golpes de un combo llevan un crossfade de 2-4 ticks.
+ */
 export class EnemyView implements FixedUpdateSystem, RenderUpdateSystem {
   readonly rig: HumanoidRig;
   readonly animation: AnimationController;
 
   private lastState: DuelistStateId | null = null;
   private lastSwingId = -1;
-  private lastDeflected = 0;
+  private showingBounce = false;
   private time = 0;
   private readonly still = { x: 0, y: 0, z: 0 };
 
@@ -34,7 +40,7 @@ export class EnemyView implements FixedUpdateSystem, RenderUpdateSystem {
 
   fixedUpdate(): void {
     if (this.enemy.frozen) {
-      this.animation.setTremble(0.008);
+      this.animation.setTremble(0.009);
       return;
     }
     this.animation.setTremble(0);
@@ -43,45 +49,85 @@ export class EnemyView implements FixedUpdateSystem, RenderUpdateSystem {
     const context = this.enemy.context;
     const changed = state !== this.lastState;
 
-    if (state === 'attack' && context.swingId !== this.lastSwingId && context.attack) {
-      const id = context.attack.id as DuelistClipId;
-      // Tras un deflect el siguiente golpe del combo arranca casi en seco desde el rebote.
-      const fade = context.deflectedCount !== this.lastDeflected ? 3 : 5;
-      this.animation.play(DUELIST_CLIPS[id], { fadeTicks: fade, restart: true });
+    if (state === 'attack' && context.attack) {
+      this.updateAttack(changed);
+    } else if (state === 'broken' && !changed && this.animation.clip === DUELIST_CLIPS.break_jolt) {
+      if (this.animation.finished) this.animation.play(DUELIST_CLIPS.broken, { fadeTicks: 0 });
     } else if (changed) {
+      this.showingBounce = false;
       this.animation.play(this.clipFor(state), {
         fadeTicks: this.fadeFor(state),
-        restart: state !== 'idle' && state !== 'approach',
+        restart: state !== 'idle' && state !== 'approach' && state !== 'dead',
       });
     }
+
     this.lastState = state;
     this.lastSwingId = context.swingId;
-    this.lastDeflected = context.deflectedCount;
     this.animation.tick();
+  }
+
+  /**
+   * Durante un ataque: si viene de un deflect (attackTicks < 0) se ve el REBOTE del arma;
+   * cuando el rebote termina, el clip del golpe arranca sincronizado con `attackTicks`.
+   */
+  private updateAttack(stateChanged: boolean): void {
+    const context = this.enemy.context;
+    const attack = context.attack;
+    if (!attack) return;
+    const newSwing = context.swingId !== this.lastSwingId;
+
+    if (context.attackTicks < 0) {
+      if (!this.showingBounce || newSwing) {
+        this.showingBounce = true;
+        this.animation.play(this.bounceClip(context.lastDeflectedStrike), {
+          fadeTicks: 0,
+          restart: true,
+        });
+      }
+      return;
+    }
+
+    const clip = DUELIST_CLIPS[attack.id as DuelistClipId];
+    if (this.showingBounce || newSwing || stateChanged || this.animation.clip !== clip) {
+      const fromBounce = this.showingBounce;
+      this.showingBounce = false;
+      this.animation.play(clip, {
+        fadeTicks: fromBounce ? 2 : 4,
+        restart: true,
+        startAt: context.attackTicks,
+      });
+    }
   }
 
   renderUpdate(ctx: FrameContext): void {
     this.animation.apply(this.enemy.frozen ? 0 : ctx.alpha);
     this.time += ctx.frameDelta;
-    updateTrail(
-      this.rig,
-      this.enemy.alive ? this.enemy.context.velocity3 : this.still,
-      this.time,
-      this.enemy.facingYaw,
-    );
+    const velocity = this.enemy.alive ? this.enemy.context.velocity3 : this.still;
+    updateTrail(this.rig, velocity, this.time, this.enemy.facingYaw);
     this.rig.root.visible = this.enemy.stateId !== 'dead' || this.enemy.machine.ticksInState < 120;
+  }
+
+  private bounceClip(strike: StrikeDirection): Clip {
+    switch (strike) {
+      case 'from_left':
+        return DUELIST_CLIPS.bounce_from_left;
+      case 'overhead':
+        return DUELIST_CLIPS.bounce_overhead;
+      default:
+        return DUELIST_CLIPS.bounce_from_right;
+    }
   }
 
   private fadeFor(state: DuelistStateId): number {
     switch (state) {
       case 'recoil':
       case 'blockstun':
-        return 0;
       case 'hitstun':
       case 'broken':
-        return 2;
+      case 'dying':
+        return 0;
       default:
-        return 8;
+        return 6;
     }
   }
 
@@ -100,10 +146,10 @@ export class EnemyView implements FixedUpdateSystem, RenderUpdateSystem {
       case 'hitstun':
         return DUELIST_CLIPS.hit_react;
       case 'broken':
-        return DUELIST_CLIPS.broken;
+        return DUELIST_CLIPS.break_jolt;
       case 'dying':
       case 'dead':
-        return DUELIST_CLIPS.death;
+        return DUELIST_CLIPS.deathblowed;
     }
   }
 }

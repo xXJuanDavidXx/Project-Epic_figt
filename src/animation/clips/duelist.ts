@@ -1,4 +1,5 @@
-import { DUMMY_ATTACKS } from '@/combat/attackData';
+import { DUMMY_ATTACKS, PLAYER_ATTACKS } from '@/combat/attackData';
+import { DEATHBLOW_PULL_TICK } from '@/animation/clips/ronin';
 import { combatConfig } from '@/config/combat';
 import type { Clip, Pose } from '@/animation/types';
 import { attackClip, clip, key, pose, vary } from '@/animation/poseKit';
@@ -234,17 +235,72 @@ const OVERHEAD: AttackPoses = {
 };
 
 // ------------------------------------------------------------------ reacciones
-/** Rebote al ser desviado: la hoja sale despedida hacia arriba y atras. */
-const RECOIL = vary(E_IDLE, {
-  root: [0, -0.04, 0.1],
-  joints: { spine: [0.22, 0.1, 0], chest: [0.2, 0.15, 0.05], head: [-0.12, 0.1, 0] },
+const BRACED = {
+  thigh_l: [0.55, 0.05, -0.06],
+  shin_l: [-1.0, 0, 0],
+  foot_l: [0.45, 0, 0],
+  thigh_r: [-0.05, -0.08, 0.1],
+  shin_r: [-0.7, 0, 0],
+  foot_r: [0.75, 0, 0],
+} as const;
+
+/**
+ * Rebote del arma al ser desviada A MITAD de combo: la hoja sale despedida en sentido
+ * contrario al golpe, los brazos se abren y la cabeza da el latigazo. Corto (lo marca
+ * `deflectBounceTicks`): enseguida enlaza con el siguiente golpe.
+ */
+const BOUNCE_FROM_RIGHT = vary(E_IDLE, {
+  root: [0, -0.08, 0.1],
+  joints: { ...BRACED, spine: [0.2, -0.25, 0], chest: [0.22, -0.4, 0.05], head: [-0.2, 0.2, 0] },
   sword: {
-    hand: [0.22, 1.66, -0.08],
-    blade: [0.35, 0.88, 0.3],
-    spine: [-0.6, 0.0, 0.8],
+    hand: [0.42, 1.55, 0.02],
+    blade: [0.82, 0.5, 0.28],
+    spine: [-0.3, 0.2, 0.93],
     pole: [0.8, -0.3, 0.4],
   },
-  offHand: { weight: 0.35 },
+  offHand: { weight: 0.55 },
+});
+const BOUNCE_FROM_LEFT = vary(E_IDLE, {
+  root: [0, -0.08, 0.1],
+  joints: { ...BRACED, spine: [0.2, 0.25, 0], chest: [0.22, 0.4, 0.05], head: [-0.2, -0.2, 0] },
+  sword: {
+    hand: [-0.3, 1.42, -0.1],
+    blade: [-0.8, 0.45, 0.4],
+    spine: [0.3, 0.3, 0.9],
+    pole: [0.8, -0.4, -0.2],
+  },
+  offHand: { weight: 0.55 },
+});
+const BOUNCE_OVERHEAD = vary(E_IDLE, {
+  root: [0, -0.06, 0.12],
+  joints: { ...BRACED, spine: [0.28, 0, 0], chest: [0.3, 0, 0], head: [-0.3, 0, 0] },
+  sword: {
+    hand: [0.14, 1.9, -0.05],
+    blade: [0.05, 0.75, 0.66],
+    spine: [0, -0.66, 0.75],
+    pole: [0.8, -0.1, 0.4],
+  },
+  offHand: { weight: 0.55 },
+});
+
+/** Ultimo golpe del combo desviado: rebote grande, paso atras, guardia abierta (castigable). */
+const RECOIL = vary(E_IDLE, {
+  root: [0, -0.1, 0.16],
+  joints: {
+    ...BRACED,
+    spine: [0.32, 0.12, 0],
+    chest: [0.3, 0.18, 0.06],
+    head: [-0.3, 0.15, 0],
+    upperarm_l: [0.6, 0, -0.9],
+    forearm_l: [0.4, 0, 0],
+  },
+  sword: {
+    hand: [0.28, 1.74, 0.0],
+    blade: [0.35, 0.86, 0.36],
+    spine: [-0.6, 0.0, 0.8],
+    pole: [0.8, -0.2, 0.4],
+  },
+  offHand: { weight: 0 },
 });
 
 const BLOCK = vary(E_IDLE, {
@@ -258,21 +314,26 @@ const BLOCK = vary(E_IDLE, {
 });
 
 const BLOCK_PUSHED = vary(BLOCK, {
-  root: [0, -0.08, 0.06],
-  joints: { spine: [0.08, 0, 0], chest: [0.1, 0.15, 0] },
-  sword: { hand: [0.08, 1.32, -0.28] },
+  root: [0, -0.12, 0.12],
+  joints: { ...BRACED, spine: [0.14, 0, 0], chest: [0.18, 0.18, 0], head: [-0.1, 0, 0] },
+  sword: { hand: [0.1, 1.36, -0.22] },
 });
 
+/** Golpe recibido: latigazo hacia atras, guardia rota por un instante. */
 const HIT = vary(E_IDLE, {
-  root: [0, -0.06, 0.08],
-  joints: { spine: [0.25, 0.2, 0.05], chest: [0.22, 0.25, 0.1], head: [-0.25, 0.2, 0] },
+  root: [0, -0.1, 0.14],
+  joints: { ...BRACED, spine: [0.34, 0.28, 0.06], chest: [0.3, 0.35, 0.12], head: [-0.4, 0.3, 0] },
   sword: {
-    hand: [0.38, 1.1, 0.05],
-    blade: [0.7, -0.4, 0.4],
+    hand: [0.44, 1.12, 0.1],
+    blade: [0.72, -0.4, 0.45],
     spine: [0, 1, 0],
     pole: [0.7, -0.5, 0.5],
   },
   offHand: { weight: 0 },
+});
+const HIT_HUNCH = vary(HIT, {
+  root: [0, -0.14, 0.14],
+  joints: { spine: [-0.2, 0.1, 0], chest: [-0.15, 0.12, 0], head: [0.3, 0.1, 0] },
 });
 
 /** Postura rota: rodilla en tierra, la punta de la hoja toca el suelo. */
@@ -302,6 +363,47 @@ const BROKEN_SWAY = vary(BROKEN, {
   root: [0.02, -0.38, 0.05],
   joints: { chest: [-0.3, 0.12, 0.04], head: [0.5, 0.05, 0] },
 });
+/** El instante de la rotura: la guardia salta por los aires antes de caer de rodillas. */
+const BREAK_JOLT = vary(E_IDLE, {
+  root: [0, -0.04, 0.12],
+  joints: {
+    ...BRACED,
+    spine: [0.4, 0, 0],
+    chest: [0.38, 0.1, 0],
+    head: [-0.5, 0, 0],
+    upperarm_l: [1.2, 0, -1.1],
+  },
+  sword: {
+    hand: [0.4, 1.8, 0.1],
+    blade: [0.5, 0.75, 0.45],
+    spine: [-0.4, 0.2, 0.9],
+    pole: [0.8, -0.1, 0.4],
+  },
+  offHand: { weight: 0 },
+});
+
+/** Empalado: el remate lo levanta y lo arquea; los brazos se abren, la hoja cae. */
+const IMPALED = vary(BROKEN, {
+  root: [0, -0.18, 0.06],
+  joints: {
+    thigh_l: [0.9, 0.05, -0.08],
+    shin_l: [-1.3, 0, 0],
+    thigh_r: [-0.05, -0.08, 0.1],
+    shin_r: [-1.1, 0, 0],
+    foot_r: [0.9, 0, 0],
+    spine: [0.35, 0, 0],
+    chest: [0.32, 0, 0],
+    head: [-0.6, 0, 0],
+    upperarm_l: [0.6, 0, -1.4],
+    forearm_l: [0.2, 0, 0],
+  },
+  sword: {
+    hand: [0.55, 1.05, 0.05],
+    blade: [0.5, -0.8, 0.2],
+    spine: [0, 0.3, -0.95],
+    pole: [0.5, -0.4, 0.7],
+  },
+});
 
 /** Muerte: se desploma hacia delante. */
 const DEAD = pose({
@@ -327,29 +429,64 @@ const DEAD = pose({
 
 const D = DUMMY_ATTACKS;
 const recoilTicks = combatConfig.attackerRecoilTicks;
+/**
+ * Ticks entre el impacto del remate y el tiron de la hoja. El evento de remate llega en el
+ * primer tick activo del `deathblow` del jugador; el tiron ocurre en DEATHBLOW_PULL_TICK.
+ */
+const pullTick = DEATHBLOW_PULL_TICK - PLAYER_ATTACKS.deathblow.startupTicks;
+
+/** Rebote: corte seco al extremo, sostenido, y suelta hacia la siguiente pose. */
+function bounceClip(name: string, bounced: Pose): Clip {
+  const ticks = combatConfig.deflectBounceTicks;
+  return clip(name, ticks, false, [key(0, bounced), key(ticks, bounced, 'hold')]);
+}
 
 export const DUELIST_CLIPS = {
   idle: clip('idle', 100, true, [key(0, E_IDLE), key(50, E_IDLE_BREATH, 'inOut')]),
   walk: clip('walk', 36, true, [key(0, walkPose(true)), key(18, walkPose(false), 'inOut')]),
-  e_slash: attackClip('e_slash', D.e_slash, SLASH),
-  e_rising: attackClip('e_rising', D.e_rising, RISING),
-  e_overhead: attackClip('e_overhead', D.e_overhead, OVERHEAD),
-  e_overhead_delayed: attackClip('e_overhead_delayed', D.e_overhead_delayed, OVERHEAD),
+  e_slash: attackClip('e_slash', D.e_slash, SLASH, { holdTicks: 4 }),
+  e_rising: attackClip('e_rising', D.e_rising, RISING, { holdTicks: 4 }),
+  e_overhead: attackClip('e_overhead', D.e_overhead, OVERHEAD, { holdTicks: 5 }),
+  e_overhead_delayed: attackClip('e_overhead_delayed', D.e_overhead_delayed, OVERHEAD, {
+    holdTicks: 5,
+    windupAt: 0.25,
+  }),
+  bounce_from_right: bounceClip('bounce_r', BOUNCE_FROM_RIGHT),
+  bounce_from_left: bounceClip('bounce_l', BOUNCE_FROM_LEFT),
+  bounce_overhead: bounceClip('bounce_o', BOUNCE_OVERHEAD),
   recoil: clip('recoil', recoilTicks, false, [
-    key(0, SLASH.strikeMid),
-    key(5, RECOIL, 'snap'),
-    key(recoilTicks - 6, RECOIL, 'linear'),
-    key(recoilTicks, E_IDLE, 'inOut'),
+    key(0, RECOIL),
+    key(recoilTicks - 8, RECOIL, 'hold'),
+    key(recoilTicks, E_IDLE, 'out'),
   ]),
   block: clip('guard_idle', 1, false, [key(0, BLOCK)]),
-  block_hit: clip('block_hit', 14, false, [key(0, BLOCK_PUSHED), key(14, BLOCK, 'inOut')]),
+  block_hit: clip('block_hit', 14, false, [
+    key(0, BLOCK_PUSHED),
+    key(5, BLOCK_PUSHED, 'hold'),
+    key(14, BLOCK, 'out'),
+  ]),
   hit_react: clip('hit_react', 18, false, [
-    key(0, E_IDLE),
-    key(3, HIT, 'snap'),
-    key(18, E_IDLE, 'inOut'),
+    key(0, HIT),
+    key(5, HIT, 'hold'),
+    key(10, HIT_HUNCH, 'snap'),
+    key(18, E_IDLE, 'out'),
   ]),
   broken: clip('guard_break', 60, true, [key(0, BROKEN), key(30, BROKEN_SWAY, 'inOut')]),
-  stagger: clip('stagger', 14, false, [key(0, RECOIL), key(14, BROKEN, 'out')]),
+  break_jolt: clip('break_jolt', 14, false, [
+    key(0, BREAK_JOLT),
+    key(5, BREAK_JOLT, 'hold'),
+    key(14, BROKEN, 'snap'),
+  ]),
+  /** Muerte por remate, sincronizada con el clip `deathblow` del jugador. */
+  deathblowed: clip('deathblowed', 90, false, [
+    key(0, BROKEN),
+    key(2, IMPALED, 'snap'),
+    key(pullTick - 1, IMPALED, 'hold'),
+    key(pullTick + 2, BROKEN, 'snap'),
+    key(pullTick + 14, BROKEN_SWAY, 'hold'),
+    key(pullTick + 38, DEAD, 'in'),
+    key(90, DEAD, 'linear'),
+  ]),
   death: clip('death', 40, false, [
     key(0, BROKEN),
     key(10, BROKEN_SWAY, 'out'),

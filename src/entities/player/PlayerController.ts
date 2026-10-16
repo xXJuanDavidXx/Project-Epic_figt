@@ -175,6 +175,7 @@ export class PlayerController implements FixedUpdateSystem, RenderUpdateSystem, 
         tick: ctx.tick,
         attackerId: this.id,
         attack: context.attack,
+        ticksToActive: context.attack.startupTicks - context.attackTicks,
       });
     }
 
@@ -348,6 +349,7 @@ export class PlayerController implements FixedUpdateSystem, RenderUpdateSystem, 
   }
 
   onAttackResolved(event: CombatEvent): void {
+    if (event.result.outcome === 'block') this.context.attackBlockedCount += 1;
     // Si el enemigo desvia un golpe nuestro, el tajo se corta (no sigue cortando).
     if (event.result.outcome === 'deflect' || event.result.outcome === 'deflect_perfect') {
       this.context.knockback.x = -event.direction.x * combatConfig.knockbackDeflect;

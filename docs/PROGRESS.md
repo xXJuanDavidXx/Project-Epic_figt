@@ -290,6 +290,45 @@ sincronía de cada clip de ataque con su `AttackDef`.
 
 ---
 
+## M2.1 — Contundencia del combate ✅ (pendiente de que lo pruebes)
+
+**Fecha:** 2026-10-16
+
+Feedback tuyo tras probar M2: la mecánica bien, las animaciones de combate "toscas", el
+deflect visible pero sin contundencia. **Preferencia de estilo registrada:** la animación se
+queda cortada (staccato), nada de suavizarla; la contundencia sale de poses y tiempos.
+
+### Diagnóstico (fotograma a fotograma)
+
+1. A mitad de combo, la hoja enemiga no rebotaba: en el mismo tick del choque el duelista
+   saltaba al clip de su siguiente golpe y su hoja "atravesaba" la guardia.
+2. La pose de deflect del ronin era casi igual que la guardia: el cuerpo no acusaba el golpe.
+3. Empuje mínimo (~13 cm) y una cámara que temblaba al azar en vez de recibir el impacto.
+
+### Qué se hizo
+
+- **Rebote en la simulación**: tras un deflect a mitad de combo, el siguiente golpe enemigo
+  espera `deflectBounceTicks` (9). La animación de rebote depende de la dirección del golpe
+  desviado. El aviso y el silbido descuentan el rebote. Testeado.
+- **Deflect coreografiado** (ronin): contacto empujando la hoja contra el golpe → retroceso seco
+  (mano atrás, torso atrás, rodillas cargadas, pie que resbala) → retroceso sostenido → guardia.
+- **Ataques con frame de impacto sostenido**: `attackClip` ahora hace snap al wind-up, tensión
+  lenta en el coil, tajo seco y SOSTIENE el extremo (3–6 ticks) antes de recuperar. Piernas de
+  estocada y torsión de cadera en los tres golpes del combo.
+- **Rebote propio al ser bloqueado**: la hoja del ronin sale despedida de la guardia enemiga.
+- **Reacciones con hold**: golpe recibido (latigazo + encorvarse), bloqueo empujado, rotura de
+  guardia, y en el duelista una sacudida antes de caer de rodillas al romperse su postura.
+- **Remate en dos tiempos**: agazaparse → estocada profunda → se sostiene dentro (cámara lenta y
+  acercamiento) → giro y arrancada (estallido de tinta, marca de corte, segundo golpe de cámara)
+  → chiburi (sacudir la hoja) → guardia. El duelista se arquea empalado y se desploma al tirón.
+- **Efectos nuevos**: estrella de impacto de un frame en el deflect, marca de corte al golpear,
+  estela sutil de la hoja durante los ticks activos, golpe de cámara direccional (resorte),
+  acercamiento de cámara y **cámara lenta de presentación** (`TimeDirector`, no afecta al
+  determinismo: los ticks siguen siendo enteros).
+- Ajustes: hitstop perfecto 8, golpe 5, remate 14; empuje de deflect 2.6 m/s, bloqueo 4.2 m/s.
+
+---
+
 ## Próximo: M3 — Lock-on y ataques peligrosos
 
 Lock-on completo con strafe, indicador de peligro original, barrido/estocada/agarre con sus

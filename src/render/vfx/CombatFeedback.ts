@@ -7,7 +7,19 @@ import type { FrameContext, RenderUpdateSystem } from '@/core/loop';
 import type { HumanoidRig } from '@/render/character/humanoid';
 import type { ThirdPersonCamera } from '@/camera/ThirdPersonCamera';
 import { SparkSystem, SplatterSystem } from '@/render/vfx/sparks';
-import { getDotTexture, getFlashTexture, getStarTexture } from '@/render/vfx/textures';
+import {
+  getDotTexture,
+  getFlashTexture,
+  getSlashTexture,
+  getStarTexture,
+} from '@/render/vfx/textures';
+import { BladeTrail } from '@/render/vfx/trail';
+import type { Combatant } from '@/combat/Combatant';
+import { timeDirector } from '@/core/timeDirector';
+import { combatConfig } from '@/config/combat';
+import { PLAYER_ATTACKS } from '@/combat/attackData';
+import { DEATHBLOW_PULL_TICK } from '@/animation/clips/ronin';
+import type { SfxSynth } from '@/audio/sfx';
 
 interface Flash {
   sprite: THREE.Sprite;
@@ -20,6 +32,14 @@ interface Ring {
   mesh: THREE.Mesh;
   age: number;
   duration: number;
+}
+
+interface Mark {
+  sprite: THREE.Sprite;
+  age: number;
+  duration: number;
+  width: number;
+  height: number;
 }
 
 interface Glint {
@@ -38,10 +58,21 @@ interface Glint {
  */
 export class CombatFeedback implements RenderUpdateSystem {
   private readonly rigs = new Map<string, HumanoidRig>();
+  private readonly trails = new Map<string, { trail: BladeTrail; owner: Combatant }>();
+  private readonly stars: Mark[] = [];
+  private readonly slashes: Mark[] = [];
+  /** Tirones de remate pendientes: tick global en que ocurren y a quien. */
+  private readonly pendingPulls: { atTick: number; victimId: string; attackerId: string }[] = [];
+  /** Sonido del tiron (opcional: la presentacion funciona sin audio). */
+  sfx: SfxSynth | null = null;
   private readonly pending: CombatHitPayload[] = [];
   private readonly pendingBreaks: { entityId: string }[] = [];
-  private readonly pendingDeathblows: { victimId: string; direction: { x: number; z: number } }[] =
-    [];
+  private readonly pendingDeathblows: {
+    victimId: string;
+    direction: { x: number; z: number };
+    attackerId: string;
+    tick: number;
+  }[] = [];
   private readonly pendingGlints: string[] = [];
 
   private readonly sparks = new SparkSystem(700);
@@ -91,6 +122,11 @@ export class CombatFeedback implements RenderUpdateSystem {
       this.flashes.push({ sprite, age: 1, duration: 1, size: 1 });
     }
 
+    for (let i = 0; i < 4; i += 1) {
+      this.stars.push(this.makeMark(getStarTexture()));
+      this.slashes.push(this.makeMark(getSlashTexture()));
+    }
+
     for (let i = 0; i < 3; i += 1) {
       const mesh = new THREE.Mesh(
         new THREE.RingGeometry(0.85, 1, 48),
@@ -113,17 +149,85 @@ export class CombatFeedback implements RenderUpdateSystem {
       const attacker = this.rigs.get(e.attackerId);
       const dir = { x: 0, z: -1 };
       if (attacker) {
+        // getWorldDirection devuelve +Z local; el personaje mira a -Z.
         attacker.root.getWorldDirection(this.tmp);
         dir.x = -this.tmp.x;
         dir.z = -this.tmp.z;
       }
-      this.pendingDeathblows.push({ victimId: e.victimId, direction: dir });
+      this.pendingDeathblows.push({
+        victimId: e.victimId,
+        direction: dir,
+        attackerId: e.attackerId,
+        tick: e.tick,
+      });
     });
     bus.on('combat:telegraph', (e) => this.pendingGlints.push(e.attackerId));
   }
 
-  register(id: string, rig: HumanoidRig): void {
+  /** Registra el rig de un combatiente: sus hojas emiten chispas, estela y brillos. */
+  register(
+    id: string,
+    rig: HumanoidRig,
+    owner?: Combatant,
+    trailColor = new THREE.Color(0.75, 0.72, 0.68),
+  ): void {
     this.rigs.set(id, rig);
+    if (owner) {
+      const trail = new BladeTrail(rig, trailColor);
+      this.scene.add(trail.mesh);
+      this.trails.set(id, { trail, owner });
+    }
+  }
+
+  private makeMark(texture: THREE.Texture): Mark {
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: texture,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: false,
+        transparent: true,
+      }),
+    );
+    sprite.visible = false;
+    sprite.renderOrder = 13;
+    this.scene.add(sprite);
+    return { sprite, age: 1, duration: 1, width: 1, height: 1 };
+  }
+
+  private showMark(
+    pool: Mark[],
+    position: THREE.Vector3,
+    width: number,
+    height: number,
+    duration: number,
+    rotation: number,
+    color: THREE.Color,
+  ): void {
+    const mark = pool.find((m) => m.age >= m.duration) ?? pool[0];
+    if (!mark) return;
+    mark.age = 0;
+    mark.duration = duration;
+    mark.width = width;
+    mark.height = height;
+    mark.sprite.position.copy(position);
+    mark.sprite.material.rotation = rotation;
+    mark.sprite.material.color.copy(color);
+    mark.sprite.visible = true;
+  }
+
+  private updateMarks(pool: Mark[], dt: number, grow: number): void {
+    for (const mark of pool) {
+      if (mark.age >= mark.duration) {
+        mark.sprite.visible = false;
+        continue;
+      }
+      mark.age += dt;
+      const t = Math.min(mark.age / mark.duration, 1);
+      // Aparece entero de golpe (frame de impacto) y se estrecha al apagarse.
+      mark.sprite.scale.set(mark.width * (1 + t * grow), mark.height * (1 - t * 0.85), 1);
+      mark.sprite.material.opacity = t < 0.35 ? 1 : 1 - (t - 0.35) / 0.65;
+    }
   }
 
   renderUpdate(ctx: FrameContext): void {
@@ -133,9 +237,24 @@ export class CombatFeedback implements RenderUpdateSystem {
 
     for (const event of this.pending.splice(0)) this.spawnImpact(event);
     for (const event of this.pendingBreaks.splice(0)) this.spawnPostureBreak(event.entityId);
-    for (const event of this.pendingDeathblows.splice(0))
-      this.spawnDeathblow(event.victimId, event.direction);
+    for (const event of this.pendingDeathblows.splice(0)) {
+      this.spawnDeathblow(event.victimId, event.direction, event.attackerId, event.tick);
+    }
     for (const id of this.pendingGlints.splice(0)) this.spawnGlint(id);
+    for (let i = this.pendingPulls.length - 1; i >= 0; i -= 1) {
+      const pull = this.pendingPulls[i];
+      if (pull && ctx.tick >= pull.atTick) {
+        this.pendingPulls.splice(i, 1);
+        this.spawnDeathblowPull(pull.victimId, pull.attackerId);
+      }
+    }
+
+    for (const { trail, owner } of this.trails.values()) {
+      trail.setActive(owner.alive && owner.activeSwing() !== null);
+      trail.update(dt);
+    }
+    this.updateMarks(this.stars, dt, 0.6);
+    this.updateMarks(this.slashes, dt, 0.35);
 
     this.sparks.update(dt);
     this.splatter.update(dt);
@@ -179,7 +298,23 @@ export class CombatFeedback implements RenderUpdateSystem {
     if (defender)
       this.bladeFlash.set(defender.sword.bladeMaterial, event.outcome === 'block' ? 0.6 : 2.2);
 
-    this.cameraRig.shake(feel.shake, event.direction);
+    // Estrella de impacto: un solo frame "dibujado" del choque, como en la animacion de lucha.
+    const perfect = event.outcome === 'deflect_perfect';
+    if (event.outcome !== 'block') {
+      const size = perfect ? 0.95 : 0.7;
+      this.showMark(
+        this.stars,
+        this.contact,
+        size,
+        size,
+        perfect ? 0.09 : 0.07,
+        Math.random() * Math.PI,
+        STAR_COLOR,
+      );
+    }
+
+    this.cameraRig.kick(event.direction, feel.shake * 0.12);
+    this.cameraRig.shake(feel.shake * 0.6, event.direction);
     if (feel.fovPunch !== 0) this.cameraRig.punchFov(feel.fovPunch);
   }
 
@@ -196,7 +331,10 @@ export class CombatFeedback implements RenderUpdateSystem {
       this.splatter.setColor(feedbackConfig.hitStyle === 'blood' ? 0x5a0a0a : 0x120a0c);
       this.splatter.burst(this.contact, event.direction, feedbackConfig.hitParticles);
     }
-    this.flash(this.contact, 0.35, 0.06);
+    this.flash(this.contact, 0.3, 0.05);
+    const angle = SLASH_ANGLE[event.strike] + (Math.random() - 0.5) * 0.3;
+    this.showMark(this.slashes, this.contact, 1.25, 0.16, 0.11, angle, CUT_COLOR);
+    this.cameraRig.kick(event.direction, 0.045);
     this.cameraRig.shake(feedbackConfig.hitShake, event.direction);
   }
 
@@ -218,20 +356,65 @@ export class CombatFeedback implements RenderUpdateSystem {
     this.light.position.copy(this.contact);
     this.cameraRig.shake(feedbackConfig.postureBreakShake);
     this.cameraRig.punchFov(-4);
+    timeDirector.slowMotion(0.4, 0.22);
   }
 
-  private spawnDeathblow(victimId: string, direction: { x: number; z: number }): void {
+  /**
+   * Remate, primer tiempo: la estocada. Camara lenta, acercamiento y un impacto contenido.
+   * El estallido grande se guarda para el segundo tiempo (el tiron de la hoja).
+   */
+  private spawnDeathblow(
+    victimId: string,
+    direction: { x: number; z: number },
+    attackerId: string,
+    tick: number,
+  ): void {
     const rig = this.rigs.get(victimId);
     if (!rig) return;
     rig.joints.chest.getWorldPosition(this.contact);
     if (feedbackConfig.hitStyle !== 'none') {
       this.splatter.setColor(feedbackConfig.hitStyle === 'blood' ? 0x5a0a0a : 0x120a0c);
-      this.splatter.burst(this.contact, direction, feedbackConfig.hitParticles * 3);
+      this.splatter.burst(this.contact, direction, feedbackConfig.hitParticles);
     }
-    this.bodyFlash.set(rig, 1.4);
-    this.flash(this.contact, 0.6, 0.1);
-    this.cameraRig.shake(feedbackConfig.deathblowShake, direction);
-    this.cameraRig.punchFov(-6);
+    this.bodyFlash.set(rig, 1.2);
+    this.flash(this.contact, 0.45, 0.08);
+    this.cameraRig.kick(direction, 0.08);
+    this.cameraRig.shake(feedbackConfig.deathblowShake * 0.6, direction);
+    this.cameraRig.punchFov(-7);
+    this.cameraRig.focus(0.62, 1.5);
+    timeDirector.slowMotion(0.22, 0.32);
+
+    // El tiron ocurre cuando ambos salen del hitstop y la animacion llega a su clave.
+    const delay =
+      combatConfig.hitstopDeathblow +
+      (DEATHBLOW_PULL_TICK - PLAYER_ATTACKS.deathblow.startupTicks) -
+      1;
+    this.pendingPulls.push({ atTick: tick + delay, victimId, attackerId });
+  }
+
+  /** Remate, segundo tiempo: se arranca la hoja. Aqui va el estallido. */
+  private spawnDeathblowPull(victimId: string, attackerId: string): void {
+    const rig = this.rigs.get(victimId);
+    const attacker = this.rigs.get(attackerId);
+    if (!rig) return;
+    rig.joints.chest.getWorldPosition(this.contact);
+    // La salpicadura sale en la direccion del tiron (hacia la derecha del atacante).
+    const dir = { x: 1, z: 0 };
+    if (attacker) {
+      attacker.root.getWorldDirection(this.tmp);
+      dir.x = -this.tmp.z;
+      dir.z = this.tmp.x;
+    }
+    if (feedbackConfig.hitStyle !== 'none') {
+      this.splatter.setColor(feedbackConfig.hitStyle === 'blood' ? 0x5a0a0a : 0x120a0c);
+      this.splatter.burst(this.contact, dir, feedbackConfig.hitParticles * 4);
+    }
+    this.showMark(this.slashes, this.contact, 1.8, 0.22, 0.14, 0.15, CUT_COLOR);
+    this.bodyFlash.set(rig, 1.6);
+    this.cameraRig.kick(dir, 0.1);
+    this.cameraRig.shake(feedbackConfig.deathblowShake, dir);
+    timeDirector.slowMotion(0.45, 0.16);
+    this.sfx?.deathblowPull();
   }
 
   /** Aviso de lectura: la hoja enemiga brilla y una estrella aparece en la punta. */
@@ -366,11 +549,12 @@ export class CombatFeedback implements RenderUpdateSystem {
       }
     }
     for (const [rig, energy] of this.bodyFlash) {
-      const next = energy * Math.exp(-dt * 14);
+      const next = energy * Math.exp(-dt * 22);
       for (const material of rig.flashMaterials) {
         if (material === rig.sword.bladeMaterial) continue;
-        material.emissive.setRGB(0.9, 0.12, 0.08);
-        material.emissiveIntensity = next * 0.6;
+        // Destello breve y contenido: marca el golpe sin teñir al personaje entero.
+        material.emissive.setRGB(1, 0.85, 0.75);
+        material.emissiveIntensity = Math.min(next, 1) * 0.22;
       }
       if (next < 0.01) {
         for (const material of rig.flashMaterials) {
@@ -398,6 +582,17 @@ export class CombatFeedback implements RenderUpdateSystem {
     }
   }
 }
+
+const STAR_COLOR = new THREE.Color(2.4, 2.1, 1.6);
+const CUT_COLOR = new THREE.Color(2.2, 1.4, 1.2);
+/** Angulo en pantalla de la marca de corte segun por donde llega el golpe. */
+const SLASH_ANGLE: Record<CombatHitPayload['strike'], number> = {
+  from_right: 0.25,
+  from_left: -0.7,
+  overhead: 1.35,
+  thrust: 0,
+  low: -0.1,
+};
 
 /** Segmento de la hoja (base -> punta) en el mundo. */
 function bladeSegment(rig: HumanoidRig, base: THREE.Vector3, tip: THREE.Vector3): void {

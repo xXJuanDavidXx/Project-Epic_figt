@@ -26,6 +26,9 @@ export class PlayerView implements FixedUpdateSystem, RenderUpdateSystem {
   private lastState: PlayerStateId | null = null;
   private lastSwingId = -1;
   private lastDeflectCount = 0;
+  private lastBlockedCount = 0;
+  /** Ticks que quedan de rebote visual tras un golpe bloqueado. */
+  private bounceTicks = 0;
   private trailTime = 0;
 
   constructor(
@@ -59,13 +62,27 @@ export class PlayerView implements FixedUpdateSystem, RenderUpdateSystem {
     const newSwing = context.swingId !== this.lastSwingId;
     const newDeflect = context.deflectCount !== this.lastDeflectCount;
 
-    if (state === 'deflect' && (stateChanged || newDeflect)) {
+    const blocked = context.attackBlockedCount !== this.lastBlockedCount;
+    this.lastBlockedCount = context.attackBlockedCount;
+
+    if (state === 'attack' && blocked && !newSwing) {
+      // La hoja rebota en la guardia enemiga; la simulacion del combo sigue intacta.
+      this.bounceTicks = 6;
+      this.animation.play(RONIN_CLIPS.attack_bounced, { fadeTicks: 0, restart: true });
+    } else if (this.bounceTicks > 0 && state === 'attack' && !newSwing) {
+      this.bounceTicks -= 1;
+      if (this.bounceTicks === 0 && context.attack) {
+        const resume = RONIN_CLIPS[context.attack.id as RoninClipId];
+        this.animation.play(resume, { fadeTicks: 2, restart: true, startAt: context.attackTicks });
+      }
+    } else if (state === 'deflect' && (stateChanged || newDeflect)) {
       // Corte seco a la pose de contacto: el golpe de acero ES el cambio de pose.
       this.animation.play(this.deflectClip(), { fadeTicks: 0, restart: true });
     } else if ((state === 'attack' || state === 'deathblow') && newSwing) {
+      this.bounceTicks = 0;
       const id = context.attack?.id;
       const clip = id && id in RONIN_CLIPS ? RONIN_CLIPS[id as RoninClipId] : RONIN_CLIPS.atk_1;
-      this.animation.play(clip, { fadeTicks: 2, restart: true });
+      this.animation.play(clip, { fadeTicks: state === 'deathblow' ? 0 : 2, restart: true });
     } else if (stateChanged) {
       this.onStateEnter(state);
     }

@@ -43,7 +43,7 @@ export class CombatAudio {
     bus.on('combat:telegraph', () => this.sfx.telegraph(0));
     bus.on('combat:swingStart', (e) => {
       // El silbido se programa para sonar justo en los ticks activos del golpe.
-      const delay = Math.max(e.attack.startupTicks - 4, 0) * FIXED_DELTA;
+      const delay = Math.max(e.ticksToActive - 4, 0) * FIXED_DELTA;
       this.sfx.swing(e.attack.postureDmg >= 25, delay, 0);
     });
   }

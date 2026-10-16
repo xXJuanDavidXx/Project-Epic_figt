@@ -23,7 +23,13 @@ export interface GameEventMap {
   'debug:timeScale': { tick: number; timeScale: number };
 
   /** Un ataque empieza su startup (silbido, trail). */
-  'combat:swingStart': { tick: number; attackerId: string; attack: AttackDef };
+  /** `ticksToActive`: ticks hasta el primer tick activo (para sincronizar silbido y trail). */
+  'combat:swingStart': {
+    tick: number;
+    attackerId: string;
+    attack: AttackDef;
+    ticksToActive: number;
+  };
   /** Aviso de lectura: brillo en la hoja poco antes del golpe de un enemigo. */
   'combat:telegraph': {
     tick: number;

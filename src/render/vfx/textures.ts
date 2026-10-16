@@ -73,3 +73,25 @@ export function getDotTexture(): THREE.Texture {
   });
   return dotTexture;
 }
+
+let slashTexture: THREE.Texture | null = null;
+
+/** Tajo: linea horizontal fina con extremos que se desvanecen (marca de corte). */
+export function getSlashTexture(): THREE.Texture {
+  slashTexture ??= canvasTexture(256, (ctx, s) => {
+    const g = ctx.createLinearGradient(0, 0, s, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.3, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.5, 'rgba(255,255,255,1)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.9)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    const h = s * 0.08;
+    ctx.beginPath();
+    ctx.moveTo(0, s / 2);
+    ctx.quadraticCurveTo(s / 2, s / 2 - h, s, s / 2);
+    ctx.quadraticCurveTo(s / 2, s / 2 + h, 0, s / 2);
+    ctx.fill();
+  });
+  return slashTexture;
+}

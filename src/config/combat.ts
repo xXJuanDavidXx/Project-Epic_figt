@@ -58,8 +58,13 @@ export interface CombatConfig {
   guardBreakTicks: number;
   /** Ticks del gesto de deflect antes de poder volver a atacar o esquivar. */
   deflectRecoverTicks: number;
-  /** Ticks que el atacante queda rebotado tras ser desviado. */
+  /** Ticks que el atacante queda rebotado tras ser desviado (ultimo golpe del combo). */
   attackerRecoilTicks: number;
+  /**
+   * Rebote del arma tras un deflect A MITAD de combo: el siguiente golpe espera estos ticks.
+   * Sin rebote la hoja enemiga "atraviesa" la guardia y el deflect no se siente.
+   */
+  deflectBounceTicks: number;
   /** Ventana de remate tras romper la postura (5.5). */
   postureBrokenTicks: number;
   deathblowRange: number;
@@ -93,14 +98,14 @@ export const combatConfig: CombatConfig = {
   hitPostureFactor: 0.5,
 
   hitstopDeflect: 5,
-  hitstopPerfectDeflect: 7,
+  hitstopPerfectDeflect: 8,
   hitstopBlock: 3,
-  hitstopHit: 4,
+  hitstopHit: 5,
   hitstopPostureBreak: 10,
-  hitstopDeathblow: 12,
+  hitstopDeathblow: 14,
 
-  knockbackDeflect: 1.6,
-  knockbackBlock: 3.8,
+  knockbackDeflect: 2.6,
+  knockbackBlock: 4.2,
   knockbackHit: 4.5,
 
   blockStunTicks: 12,
@@ -108,6 +113,7 @@ export const combatConfig: CombatConfig = {
   guardBreakTicks: 75,
   deflectRecoverTicks: 10,
   attackerRecoilTicks: 24,
+  deflectBounceTicks: 9,
   postureBrokenTicks: 150,
   deathblowRange: 2.6,
   dodgeIFrames: [2, 11],

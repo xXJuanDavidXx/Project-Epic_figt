@@ -26,6 +26,13 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
   private readonly shakeBias = new THREE.Vector3();
   private fovOffset = 0;
   private baseFov: number;
+  /** Golpe direccional: resorte critico (impulso seco que vuelve sin rebotar). */
+  private readonly kickOffset = new THREE.Vector3();
+  private readonly kickVelocity = new THREE.Vector3();
+  /** Acercamiento dramatico (remates): fraccion de la distancia normal y tiempo restante. */
+  private focusScale = 1;
+  private focusTarget = 1;
+  private focusRemaining = 0;
 
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
@@ -47,6 +54,22 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
     if (direction) {
       this.shakeBias.set(direction.x, 0, direction.z).multiplyScalar(amount * 0.12);
     }
+  }
+
+  /**
+   * Golpe direccional: la camara "recibe" el impacto, se desplaza en la direccion del golpe
+   * y vuelve como un resorte. Se siente mas que la sacudida aleatoria.
+   */
+  kick(direction: { x: number; z: number }, amount: number): void {
+    this.kickVelocity.x += direction.x * amount * 2.4;
+    this.kickVelocity.z += direction.z * amount * 2.4;
+    this.kickVelocity.y -= amount * 0.8;
+  }
+
+  /** Acerca la camara (remate) durante `seconds` de tiempo real. */
+  focus(scale: number, seconds: number): void {
+    this.focusTarget = scale;
+    this.focusRemaining = seconds;
   }
 
   /** Golpe de FOV: negativo = zoom de impacto, positivo = aturdimiento. */
@@ -78,7 +101,7 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
     const cosPitch = Math.cos(pitch);
     this.offset.set(Math.sin(yaw) * cosPitch, Math.sin(pitch), Math.cos(yaw) * cosPitch);
 
-    const maxDistance = cameraConfig.distance;
+    const maxDistance = cameraConfig.distance * this.focusScale;
     let distance = maxDistance;
 
     const hit = this.physics.world.castShape(
@@ -128,6 +151,19 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
     // Tiempo real del frame: la sacudida sigue durante el hitstop (el mundo se congela, la camara no).
     const dt = frameDelta > 0 ? frameDelta : 1 / 60;
     this.shakeTime += dt;
+
+    // Resorte critico del golpe direccional (omega alto = vuelve rapido, sin oscilar).
+    const omega = 38;
+    this.kickVelocity.addScaledVector(this.kickOffset, -omega * omega * dt);
+    this.kickVelocity.multiplyScalar(Math.exp(-2 * omega * dt));
+    this.kickOffset.addScaledVector(this.kickVelocity, dt);
+    this.camera.position.add(this.kickOffset);
+
+    // Acercamiento de remate.
+    if (this.focusRemaining > 0) this.focusRemaining -= dt;
+    const goal = this.focusRemaining > 0 ? this.focusTarget : 1;
+    this.focusScale +=
+      (goal - this.focusScale) * (1 - Math.exp(-dt * (goal < this.focusScale ? 9 : 3)));
     if (this.trauma > 0.001) {
       const power = this.trauma * this.trauma;
       const t = this.shakeTime * 38;

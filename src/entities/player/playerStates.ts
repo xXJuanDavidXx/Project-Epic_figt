@@ -87,6 +87,8 @@ export interface PlayerContext {
   lastStrike: StrikeDirection;
   /** Contador de deflects: alterna entre variantes de animacion. */
   deflectCount: number;
+  /** Veces que el enemigo ha bloqueado un golpe nuestro (la vista muestra el rebote). */
+  attackBlockedCount: number;
   /** Empuje recibido, en m/s, que se va frenando. */
   knockback: Vec2;
   /** Duracion del estado de reaccion actual, en ticks. */
@@ -129,6 +131,7 @@ export function createPlayerContext(
     swingId: 0,
     lastStrike: 'from_right',
     deflectCount: 0,
+    attackBlockedCount: 0,
     knockback: { x: 0, z: 0 },
     reactionTicks: 0,
   };

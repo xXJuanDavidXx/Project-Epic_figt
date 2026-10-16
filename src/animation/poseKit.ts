@@ -76,23 +76,47 @@ export interface AttackPoses {
   recover: Pose;
 }
 
+export interface AttackClipOptions {
+  /**
+   * Ticks que se SOSTIENE la pose de impacto tras el ultimo tick activo. Es el "frame de
+   * impacto" de la animacion de lucha: el ojo necesita ver el extremo quieto para sentir el
+   * golpe. Encaja con el estilo cortado (staccato) del juego.
+   */
+  holdTicks?: number;
+  /** Proporcion del startup en que se alcanza el wind-up (el resto es tension en el coil). */
+  windupAt?: number;
+}
+
 /**
  * Construye un clip de ataque A PARTIR DEL AttackDef: las claves caen en los ticks exactos
  * de startup/active/recovery, asi que la hoja visible y la hitbox no pueden desincronizarse.
+ *
+ * Estructura (estilo cortado, sin suavizar):
+ *   ready -snap-> windup -lento-> coil -SNAP-> strikeStart -> strikeMid -> strikeEnd
+ *   -hold-> (impacto sostenido) -out-> followThrough -out-> recover
  */
-export function attackClip(name: string, def: AttackDef, poses: AttackPoses): Clip {
+export function attackClip(
+  name: string,
+  def: AttackDef,
+  poses: AttackPoses,
+  options: AttackClipOptions = {},
+): Clip {
   const s = def.startupTicks;
   const a = def.activeTicks;
   const total = s + a + def.recoveryTicks;
-  const follow = Math.min(s + a + 6, total - 2);
+  const hold = Math.min(options.holdTicks ?? 3, Math.max(def.recoveryTicks - 8, 0));
+  const windupAt = Math.max(2, Math.round(s * (options.windupAt ?? 0.4)));
+  const holdEnd = s + a + hold;
+  const follow = Math.min(holdEnd + 5, total - 3);
   return clip(name, total, false, [
     key(0, poses.ready),
-    key(Math.max(2, Math.round(s * 0.55)), poses.windup, 'out'),
-    key(s - 1, poses.coil, 'inOut'),
+    key(windupAt, poses.windup, 'snap'),
+    key(s - 1, poses.coil, 'linear'),
     key(s, poses.strikeStart, 'snap'),
     key(s + Math.floor(a / 2), poses.strikeMid, 'linear'),
     key(s + a, poses.strikeEnd, 'linear'),
+    key(holdEnd, poses.strikeEnd, 'hold'),
     key(follow, poses.followThrough, 'out'),
-    key(total, poses.recover, 'inOut'),
+    key(total, poses.recover, 'out'),
   ]);
 }

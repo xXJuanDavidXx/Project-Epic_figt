@@ -82,10 +82,11 @@ async function bootstrap(): Promise<void> {
 
   // --- presentacion del combate: chispas, luz, sacudida, sonido, HUD ---
   const feedback = new CombatFeedback(view.scene, view.camera, camera, events);
-  feedback.register(player.id, playerView.rig);
-  feedback.register(enemy.id, enemyView.rig);
+  feedback.register(player.id, playerView.rig, player);
+  feedback.register(enemy.id, enemyView.rig, enemy, new THREE.Color(0.85, 0.38, 0.28));
   const sfx = new SfxSynth();
   new CombatAudio(sfx, view.camera, events);
+  feedback.sfx = sfx;
   // El audio del navegador solo arranca tras un gesto del usuario.
   const unlockAudio = (): void => sfx.unlock();
   window.addEventListener('pointerdown', unlockAudio);

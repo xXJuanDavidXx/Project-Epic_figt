@@ -64,8 +64,8 @@ export class EnemyDuelist implements FixedUpdateSystem, RenderUpdateSystem, Comb
       combatConfig,
       DUMMY_PATTERN,
       {
-        onSwingStart: (attack, tick) => {
-          this.bus.emit('combat:swingStart', { tick, attackerId: this.id, attack });
+        onSwingStart: (attack, tick, ticksToActive) => {
+          this.bus.emit('combat:swingStart', { tick, attackerId: this.id, attack, ticksToActive });
         },
         onTelegraph: (attack, tick, ticksToImpact) => {
           this.bus.emit('combat:telegraph', { tick, attackerId: this.id, attack, ticksToImpact });
@@ -254,6 +254,7 @@ export class EnemyDuelist implements FixedUpdateSystem, RenderUpdateSystem, Comb
     if (outcome !== 'deflect' && outcome !== 'deflect_perfect') return;
     const context = this.context;
     context.deflectedCount += 1;
+    context.lastDeflectedStrike = event.attack.strike;
     context.knockback.x = -event.direction.x * combatConfig.knockbackDeflect;
     context.knockback.z = -event.direction.z * combatConfig.knockbackDeflect;
     if (event.attackerPostureBroken) {
@@ -261,7 +262,9 @@ export class EnemyDuelist implements FixedUpdateSystem, RenderUpdateSystem, Comb
       return;
     }
     // El deflect NO corta el combo: si queda otro golpe, sale ya (el ritmo clang-clang-clang).
-    if (!continueCombo(context)) this.machine.force('recoil', event.tick);
+    if (!continueCombo(context, combatConfig.deflectBounceTicks)) {
+      this.machine.force('recoil', event.tick);
+    }
   }
 
   onDeathblowReceived(tick: number): void {

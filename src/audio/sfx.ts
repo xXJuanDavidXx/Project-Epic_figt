@@ -120,6 +120,16 @@ export class SfxSynth {
     metal(ctx, out, t + 0.05, 2400, [1, 2.4], [0.4, 0.2], [1.6, 1], 0.08);
   }
 
+  /** El tiron de la hoja al final del remate: desgarro humedo y golpe sordo. */
+  deathblowPull(pan = 0): void {
+    const io = this.begin(pan);
+    if (!io) return;
+    const { ctx, out, t } = io;
+    this.noise(ctx, out, t, 0.22, 'bandpass', 480, 1);
+    this.noise(ctx, out, t + 0.02, 0.18, 'bandpass', 1300, 0.6);
+    thump(ctx, out, t, 70, 28, 0.45, 0.9);
+  }
+
   /** Silbido de la hoja. `delay` en segundos: se programa para caer en el golpe. */
   swing(heavy: boolean, delay: number, pan = 0): void {
     const io = this.begin(pan);
