@@ -1,14 +1,22 @@
 import * as THREE from 'three';
 import { GameLoop } from '@/core/loop';
+import { InputManager } from '@/core/input';
 import { PhysicsWorld } from '@/physics/world';
-import { InterpolatedBody } from '@/physics/bodySync';
-import { SceneView, addGreyboxGround, addGreyboxLighting } from '@/render/scene';
+import { SceneView, addGreyboxLighting } from '@/render/scene';
+import { buildGreyboxLevel } from '@/world/greyboxLevel';
+import { CameraRig } from '@/camera/CameraRig';
+import { ThirdPersonCamera } from '@/camera/ThirdPersonCamera';
+import { PlayerController, createPlayerGreyboxMesh } from '@/entities/player/PlayerController';
 import { DebugStats } from '@/debug/stats';
 import { PhysicsDebugView } from '@/debug/physicsDebugView';
+import { FIXED_DELTA } from '@/config/sim';
 
 /**
- * Bootstrap. Orden fijo: fisica -> render -> sistemas -> loop.
- * Los sistemas se registran en el orden en que deben correr.
+ * Bootstrap.
+ *
+ * El ORDEN de registro de sistemas es parte del diseño:
+ *   simulacion: input -> camara (yaw) -> jugador (mueve) -> fisica (step)
+ *   render:     jugador (interpola) -> camara (coloca) -> debug -> escena (dibuja)
  */
 async function bootstrap(): Promise<void> {
   const canvas = document.querySelector<HTMLCanvasElement>('#viewport');
@@ -17,38 +25,59 @@ async function bootstrap(): Promise<void> {
   const physics = await PhysicsWorld.create();
   const view = new SceneView(canvas);
   addGreyboxLighting(view.scene);
-  addGreyboxGround(view.scene, 60);
+  buildGreyboxLevel(view.scene, physics);
 
   const loop = new GameLoop();
+  const input = new InputManager(canvas);
+  const rig = new CameraRig(input);
 
-  // 1. Fisica (simulacion).
+  const playerMesh = createPlayerGreyboxMesh();
+  view.scene.add(playerMesh);
+  const player = new PlayerController(
+    physics,
+    input,
+    rig,
+    new THREE.Vector3(0, 2, 6),
+    playerMesh,
+    FIXED_DELTA,
+  );
+  const camera = new ThirdPersonCamera(
+    view.camera,
+    rig,
+    playerMesh,
+    physics,
+    player.characterCollider,
+  );
+
+  // --- simulacion (orden estricto) ---
+  loop.add(input);
+  loop.add(rig);
+  loop.add(player);
   loop.add(physics);
 
-  // --- Greybox M0: suelo fisico + cubo dinamico que cae. Se reemplaza en M1. ---
-  physics.addStaticBox({ x: 30, y: 0.25, z: 30 }, { x: 0, y: -0.25, z: 0 });
+  // Red de seguridad: si se cae del mundo, vuelve al punto de aparicion.
+  const spawn = new THREE.Vector3(0, 2, 6);
+  loop.add({
+    fixedUpdate: () => {
+      if (player.worldPosition.y < -20) player.teleport(spawn);
+    },
+  });
 
-  const cubeMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0xc8503c, roughness: 0.5, metalness: 0.1 }),
-  );
-  cubeMesh.castShadow = true;
-  view.scene.add(cubeMesh);
-
-  const cubeBody = physics.addDynamicBox({ x: 0.5, y: 0.5, z: 0.5 }, { x: 0, y: 6, z: 0 });
-  cubeBody.setAngvel({ x: 1.2, y: 2.4, z: 0.6 }, true);
-  loop.add(new InterpolatedBody(cubeBody, cubeMesh));
-  // --- fin greybox M0 ---
-
-  // 2. Render (al final, cuando todas las poses ya estan interpoladas).
-  loop.add(view);
+  // --- render ---
+  loop.add(camera);
 
   if (import.meta.env.DEV) {
     loop.add(new PhysicsDebugView(physics, view.scene));
-    loop.add(new DebugStats(loop));
-    const { createDebugGui } = await import('@/debug/gui');
+    loop.add(new DebugStats(loop, player));
+    const [{ createDebugGui }, { exposeDevHandle }] = await Promise.all([
+      import('@/debug/gui'),
+      import('@/debug/devHandle'),
+    ]);
     createDebugGui(loop, view);
+    exposeDevHandle({ loop, input, rig, player, physics, view });
   }
 
+  loop.add(view);
   loop.start();
 }
 

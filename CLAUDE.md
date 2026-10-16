@@ -1,7 +1,19 @@
-# CLAUDE.md — Juego de acción "soulslike" estilo duelo de katanas (navegador)
+# CLAUDE.md — epic_fights · juego de acción "soulslike" estilo duelo de katanas (navegador)
 
 > Este archivo es la fuente de verdad del proyecto. Léelo completo antes de cada sesión.
 > Si algo aquí entra en conflicto con lo que te pida el usuario en el chat, gana el chat, y actualiza este archivo.
+
+---
+
+## 0. Acuerdos vigentes (decididos en chat)
+
+- **Nombre del proyecto: `epic_fights`** (paquete npm `epic-fights`). Decidido 2026-10-15.
+- **Orden de trabajo acordado 2026-10-15**: el agente avanza seguido por los milestones de
+  mecánica (M1–M4) sin esperar validación milestone a milestone, porque son greybox y no
+  dependen de arte. El usuario valida al final de cada bloque y entra de lleno a partir de
+  **M5 (pipeline de assets)** con la dirección de arte. Esto sustituye a la regla 1 de la
+  sección 3 mientras dure el bloque de mecánicas.
+- El usuario **no genera arte todavía**: hasta M5 todo es cápsulas y cubos.
 
 ---
 
@@ -87,6 +99,8 @@ src/
   render/
     scene.ts
     vfx.ts                chispas, trails, hitstop visual
+  world/
+    greyboxLevel.ts       geometria del nivel: mallas + colliders juntos
   audio/
   ui/                     HUD: barras de vida y postura, indicador de peligro
   config/                 todos los números de tuning

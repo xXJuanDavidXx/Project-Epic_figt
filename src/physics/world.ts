@@ -29,16 +29,17 @@ export class PhysicsWorld implements FixedUpdateSystem {
     this.world.step(this.eventQueue);
   }
 
-  /** Suelo estatico (cuboide fino). Devuelve el collider creado. */
+  /** Caja estatica del escenario. Devuelve el collider creado. */
   addStaticBox(
     halfExtents: { x: number; y: number; z: number },
     position: { x: number; y: number; z: number },
+    rotation?: { x: number; y: number; z: number; w: number },
   ): RAPIER.Collider {
-    const body = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(position.x, position.y, position.z),
-    );
-    const desc = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z);
-    return this.world.createCollider(desc, body);
+    let bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(position.x, position.y, position.z);
+    if (rotation) bodyDesc = bodyDesc.setRotation(rotation);
+    const body = this.world.createRigidBody(bodyDesc);
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(halfExtents.x, halfExtents.y, halfExtents.z);
+    return this.world.createCollider(colliderDesc, body);
   }
 
   /** Cuerpo dinamico de prueba (greybox M0). */

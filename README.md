@@ -1,4 +1,4 @@
-# Filo de Ceniza
+# epic_fights
 
 Juego de acción 3D en tercera persona para navegador: duelos de katana basados en ritmo
 (desviar en el momento justo → romper la postura → rematar). Contenido original.

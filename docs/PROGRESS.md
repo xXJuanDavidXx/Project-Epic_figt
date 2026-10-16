@@ -91,7 +91,93 @@ saltos se sientan nítidos. Se tunea en M1 junto con la altura de salto.
 
 ---
 
-## Próximo: M1 — Movimiento y cámara
+## M1 — Movimiento y cámara ✅
 
-Character controller cinemático de Rapier, salto con coyote time + jump buffer, sprint, esquiva,
-cámara en tercera persona con colisión, greybox con rampas y escalones.
+**Fecha:** 2026-10-15
+
+### Qué se hizo
+
+- **Input** (`src/core/input.ts`): teclado + ratón + **gamepad** (mapeo estándar, zona muerta
+  reescalada). Los eventos del DOM solo acumulan; la simulación lee una foto estable por tick.
+  - `InputBuffer` (~9 ticks, tuneable): una acción pulsada durante la recuperación de otra se
+    ejecuta en cuanto el estado lo permite. Pieza pura y testeada.
+  - Pointer lock al hacer clic en el canvas; al perder el foco se sueltan todas las teclas.
+- **FSM genérica** (`src/core/fsm.ts`): `enter`/`update`/`exit` + transiciones evaluadas en orden,
+  encadenables dentro del mismo tick (tope de 4, sin bucles infinitos), historial con el tick de
+  cada cambio. La usarán también los enemigos.
+- **Estados del jugador** (`playerStates.ts`): `idle, run, sprint, jump, fall, dodge`.
+  Shift tap = esquiva, Shift mantenido = sprint (como el juego de referencia).
+- **Locomoción pura** (`locomotion.ts`): aceleración/frenada separadas, dirección relativa a la
+  cámara, giro por el lado corto, `GroundMemory` con coyote time y bloqueo de doble salto.
+- **PlayerController**: character controller **cinemático** de Rapier (no rigidbody dinámico) con
+  autostep, snap-to-ground, pendientes y deslizamiento. Gravedad asimétrica (se cae más rápido de
+  lo que se sube) y salto variable según se mantenga el botón.
+- **Cámara**: `CameraRig` (yaw/pitch en la simulación, determinista, porque el movimiento es
+  relativo a ella) + `ThirdPersonCamera` (coloca la cámara en el render con esfera de colisión
+  contra el mundo; nunca atraviesa un muro). Altura del pivote suavizada aparte para que los
+  escalones no sacudan la cámara.
+- **Nivel greybox** (`src/world/greyboxLevel.ts`): suelo, rampas de 15°/30°/48°, escalera de 8
+  escalones de 0.3 m, tres plataformas a distinta altura, pasillo estrecho con techo (prueba de
+  cámara) y muros perimetrales. Malla y collider se crean juntos: no pueden desincronizarse.
+- **Debug**: el overlay añade estado FSM + ticks en estado, suelo, velocidad y posición. El panel
+  lil-gui expone todo el tuning de jugador, esquiva y cámara. En dev, `window.__game` da acceso a
+  loop/input/rig/player/physics/view desde la consola.
+
+### Cómo probarlo
+
+`npm run dev`, clic en el canvas para capturar el ratón.
+
+| Control          | Acción                                               |
+| ---------------- | ---------------------------------------------------- |
+| WASD             | Mover (relativo a la cámara)                         |
+| Ratón            | Cámara                                               |
+| Espacio          | Saltar (mantener = salto alto, soltar = salto corto) |
+| Shift (toque)    | Esquiva                                              |
+| Shift (mantener) | Sprint                                               |
+
+Checklist de aceptación (verificado en navegador):
+
+- Rampa de 15° y 30°: se suben andando. La de 48° desliza (por encima del ángulo de deslizamiento).
+- Escalera de 0.3 m: se sube sola por autostep, sin saltar (medido: y 0.92 → 2.72).
+- Salto: altura real medida 1.63 m con `jumpHeight` 1.7 (pérdida por integración a 60 Hz).
+- Cámara contra un muro alto: se queda a 0.20 m del pivote sin atravesarlo; al despejarse vuelve
+  suavemente a 5 m.
+- Si te caes del mundo (y < −20) vuelves al punto de aparición.
+
+### Valores de tuning actuales
+
+| Parámetro                     | Valor         | Archivo            |
+| ----------------------------- | ------------- | ------------------ |
+| `walkSpeed` / `sprintSpeed`   | 4.6 / 7.6 m/s | `config/player.ts` |
+| `groundAccel` / `groundDecel` | 70 / 55 m/s²  | `config/player.ts` |
+| `airControl`                  | 0.35          | `config/player.ts` |
+| `jumpHeight`                  | 1.7 m         | `config/player.ts` |
+| `fallGravityMultiplier`       | 1.45          | `config/player.ts` |
+| `lowJumpGravityMultiplier`    | 2.2           | `config/player.ts` |
+| `coyoteTicks`                 | 6             | `config/player.ts` |
+| `bufferTicks` (input)         | 9             | `config/input.ts`  |
+| `dodgeSpeed` / `dodgeTicks`   | 11.5 / 16     | `config/player.ts` |
+| `distance` / `pivotHeight`    | 5 / 1.45 m    | `config/camera.ts` |
+| `mouseSensitivity`            | 0.0024 rad/px | `config/camera.ts` |
+
+### Qué quedó pendiente
+
+- Sin animaciones: el jugador es una cápsula con una marca roja al frente para leer la
+  orientación. Los estados ya están listos para mapear clips en M5.
+- Remapeo de controles en un menú (M8); de momento el mapeo vive en `config/input.ts`.
+- `strafe` con lock-on llega en M3: ahora el personaje siempre mira hacia donde se mueve.
+
+### Tests (91 en total)
+
+`FixedStepAccumulator` y `GameLoop`, `EventBus`, `InputBuffer` + zona muerta, `StateMachine`,
+matemáticas de locomoción (incluida una simulación del salto que comprueba el ápice) y **la FSM
+completa del jugador** con un input falso: coyote time, buffer de salto al aterrizar, no al doble
+salto, duración y recuperación de la esquiva, transiciones de sprint.
+
+---
+
+## Próximo: M2 — Núcleo de combate (greybox)
+
+FSM de combate (ataque, guardia, deflect), postura y vitalidad como módulos puros, hitboxes
+ligadas a huesos con modo debug, dummy enemigo con patrón fijo, hitstop, chispas y sonidos
+placeholder.
