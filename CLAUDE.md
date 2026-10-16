@@ -13,7 +13,18 @@
   dependen de arte. El usuario valida al final de cada bloque y entra de lleno a partir de
   **M5 (pipeline de assets)** con la dirección de arte. Esto sustituye a la regla 1 de la
   sección 3 mientras dure el bloque de mecánicas.
-- El usuario **no genera arte todavía**: hasta M5 todo es cápsulas y cubos.
+- ~~El usuario no genera arte todavía: hasta M5 todo es cápsulas y cubos.~~ Sustituido el
+  2026-10-15: el usuario pidió **adelantar el personaje y la animación a M2**, empezando por el
+  deflect, para que se sienta contundente desde ya. Se resuelve así, sin assets externos:
+  - **Personaje procedural** (`src/render/character/`): humanoide estilizado low-poly hecho con
+    primitivas, con jerarquía de articulaciones nombradas según la convención de huesos de la
+    sección 9 (`weapon_r` incluido).
+  - **Animación procedural por poses clave** (`src/animation/`): clips definidos como datos en
+    TICKS, muestreados de forma pura y aplicados en el render. Los clips de ataque se construyen
+    a partir del `AttackDef`, así que lo visual no puede desincronizarse del combate.
+  - En **M5** se añade un backend glTF (`AnimationMixer`) detrás de la misma interfaz: el juego
+    pide clips por nombre (`deflect_1`, `atk_1`...) y no sabe de dónde salen.
+  - La regla "greybox primero" se mantiene para el **nivel**, no para los personajes.
 
 ---
 
@@ -101,6 +112,12 @@ src/
     vfx.ts                chispas, trails, hitstop visual
   world/
     greyboxLevel.ts       geometria del nivel: mallas + colliders juntos
+  animation/              poses y clips como DATOS en ticks; muestreo puro
+    rig.ts                nombres de articulaciones (convencion de la seccion 9)
+    clips/                clips por personaje
+    sampler.ts            muestreo y mezcla de poses (sin Three.js)
+    AnimationController.ts  aplica poses al rig en el render (crossfade, one-shots)
+  render/character/       personajes procedurales (rig + mallas)
   audio/
   ui/                     HUD: barras de vida y postura, indicador de peligro
   config/                 todos los números de tuning

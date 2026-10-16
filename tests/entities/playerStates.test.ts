@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActionId } from '@/config/input';
 import { playerConfig } from '@/config/player';
+import { combatConfig } from '@/config/combat';
 import { StateMachine } from '@/core/fsm';
 import { InputBuffer } from '@/core/input';
 import type { InputState } from '@/core/input';
@@ -76,7 +77,7 @@ interface Harness {
 
 function harness(grounded = true): Harness {
   const input = new FakeInput();
-  const context = createPlayerContext(playerConfig, input, GRAVITY, DT);
+  const context = createPlayerContext(playerConfig, combatConfig, input, GRAVITY, DT);
   context.grounded = grounded;
   context.desiredDirection = { x: 0, z: -1 };
   const machine = new StateMachine<PlayerContext, PlayerStateId>(

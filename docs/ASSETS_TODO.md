@@ -57,3 +57,9 @@ death, grapple_throw, crouch_idle, crouch_walk`.
 | Barra de vitalidad | P0        | M2        | Rectángulo CSS       |
 | Barra de postura   | P0        | M2        | Rectángulo CSS       |
 | Tipografía del HUD | P2        | M8        | Monoespaciada del SO |
+
+## Animaciones procedurales a revisar con dirección de arte
+
+Hechas a mano en código (`src/animation/clips/`). Revisadas con capturas: guardia y deflects.
+Sin revisar a fondo: ataques del jugador, golpe recibido, rotura de guardia, muerte del duelista.
+Cuando llegue el pipeline glTF (M5) se sustituyen por clips de Blender con los mismos nombres.

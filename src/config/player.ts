@@ -40,6 +40,20 @@ export interface PlayerConfig {
   dodgeTicks: number;
   dodgeRecoveryTicks: number;
 
+  // Combate
+  /** Velocidad andando con la guardia alta. */
+  guardWalkSpeed: number;
+  /** Distancia a la que el jugador se encara solo al enemigo mas cercano (sin lock-on). */
+  softLockRange: number;
+  /** Giro hacia el objetivo en guardia/ataque, rad/s. */
+  combatTurnSpeed: number;
+  /** Fraccion del empuje que se conserva cada tick (0.8 = frena rapido). */
+  knockbackRetention: number;
+  /** El avance de un ataque se detiene a esta distancia del objetivo. */
+  attackStopDistance: number;
+  /** Ticks muerto antes de reaparecer (M2: sin menu de muerte todavia). */
+  deadTicks: number;
+
   // Terreno
   maxSlopeClimbAngleDeg: number;
   minSlopeSlideAngleDeg: number;
@@ -69,6 +83,13 @@ export const playerConfig: PlayerConfig = {
   dodgeSpeed: 11.5,
   dodgeTicks: 16,
   dodgeRecoveryTicks: 8,
+
+  guardWalkSpeed: 2.3,
+  softLockRange: 7,
+  combatTurnSpeed: 16,
+  knockbackRetention: 0.8,
+  attackStopDistance: 1.25,
+  deadTicks: 150,
 
   maxSlopeClimbAngleDeg: 50,
   minSlopeSlideAngleDeg: 38,

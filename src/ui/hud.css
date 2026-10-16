@@ -1,0 +1,222 @@
+/*
+ * HUD de epic_fights.
+ * Concepto: la postura es CALOR acumulado en el acero. La barra es una hoja que se enciende
+ * desde el centro: brasa -> blanco incandescente. Misma familia de color que las chispas del
+ * deflect, para que pantalla y mundo hablen el mismo idioma.
+ */
+:root {
+  --hud-washi: #e8e1d3;
+  --hud-steel: #7d8794;
+  --hud-ember: #e8893a;
+  --hud-hot: #fff2c9;
+  --hud-lacquer: #9e2b25;
+  --hud-lacquer-dark: #4a1512;
+  --hud-ink: rgba(9, 10, 13, 0.62);
+  --hud-serif: 'Shippori Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', Georgia, serif;
+}
+
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--hud-serif);
+  color: var(--hud-washi);
+}
+
+/* ---------------------------------------------------------------- hoja de postura */
+.posture {
+  --fill: 0;
+  --heat: 0;
+  position: absolute;
+  height: 9px;
+  /* Hoja: punta en ambos extremos, lomo recto. */
+  clip-path: polygon(0 50%, 3% 0, 97% 0, 100% 50%, 97% 100%, 3% 100%);
+  background: linear-gradient(180deg, rgba(232, 225, 211, 0.16), rgba(232, 225, 211, 0.06));
+  transition: opacity 260ms ease;
+}
+
+.posture__fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(var(--fill));
+  transform-origin: 50% 50%;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--hud-ember), var(--hud-hot) calc(var(--heat) * 100%)) 0%,
+    color-mix(in oklab, var(--hud-hot), white calc(var(--heat) * 60%)) 50%,
+    color-mix(in oklab, var(--hud-ember), var(--hud-hot) calc(var(--heat) * 100%)) 100%
+  );
+  box-shadow: 0 0 calc(4px + var(--heat) * 14px) rgba(255, 180, 90, calc(0.25 + var(--heat) * 0.55));
+}
+
+/* Muesca central: el punto desde el que crece la postura. */
+.posture::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--hud-ink);
+}
+
+/* Cerca de romperse: reverberacion de calor. */
+.posture--critical .posture__fill {
+  animation: heat-haze 140ms steps(2) infinite;
+}
+
+@keyframes heat-haze {
+  from {
+    filter: brightness(1.05);
+  }
+  to {
+    filter: brightness(1.35);
+  }
+}
+
+/* Golpe recibido: la hoja destella un instante. */
+.posture--struck .posture__fill {
+  filter: brightness(1.8);
+}
+
+.posture--broken .posture__fill {
+  background: var(--hud-hot);
+  box-shadow: 0 0 22px rgba(255, 220, 160, 0.9);
+}
+
+/* ---------------------------------------------------------------- vitalidad */
+.vitality {
+  --fill: 1;
+  --lag: 1;
+  position: absolute;
+  height: 5px;
+  background: rgba(232, 225, 211, 0.1);
+  outline: 1px solid rgba(232, 225, 211, 0.22);
+  outline-offset: 2px;
+}
+
+/* Rastro del daño reciente: se vacia con retraso para leer cuanto quito el golpe. */
+.vitality__lag,
+.vitality__fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 50%;
+}
+
+.vitality__lag {
+  transform: scaleX(var(--lag));
+  background: var(--hud-washi);
+  opacity: 0.55;
+}
+
+.vitality__fill {
+  transform: scaleX(var(--fill));
+  background: linear-gradient(180deg, #b8372f, var(--hud-lacquer) 60%, var(--hud-lacquer-dark));
+}
+
+/* ---------------------------------------------------------------- jugador */
+.hud-player__vitality {
+  left: 32px;
+  bottom: 40px;
+  width: min(300px, 40vw);
+}
+
+.hud-player__posture {
+  left: 50%;
+  bottom: 64px;
+  width: min(440px, 70vw);
+  transform: translateX(-50%);
+}
+
+/* ---------------------------------------------------------------- enemigo enfocado */
+.hud-enemy {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 150px;
+  transform: translate(-50%, -100%);
+  transition: opacity 200ms ease;
+}
+
+.hud-enemy .posture {
+  position: relative;
+  height: 6px;
+  width: 100%;
+}
+
+.hud-enemy .vitality {
+  position: relative;
+  height: 3px;
+  width: 70%;
+  margin: 7px auto 0;
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------- marca de remate */
+.deathblow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 92px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.deathblow--visible {
+  opacity: 1;
+}
+
+.deathblow svg {
+  width: 64px;
+  height: 64px;
+  overflow: visible;
+  filter: drop-shadow(0 0 6px rgba(255, 170, 90, 0.85))
+    drop-shadow(0 0 18px rgba(232, 137, 58, 0.5));
+  animation: deathblow-pulse 900ms ease-in-out infinite;
+}
+
+.deathblow__label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+}
+
+.deathblow__key {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-right: 6px;
+  padding: 0 5px;
+  border: 1px solid rgba(232, 225, 211, 0.6);
+  border-radius: 3px;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  vertical-align: 1px;
+}
+
+@keyframes deathblow-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deathblow svg,
+  .posture--critical .posture__fill {
+    animation: none;
+  }
+}

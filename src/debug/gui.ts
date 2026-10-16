@@ -8,12 +8,21 @@ import { simConfig } from '@/config/sim';
 import { events } from '@/core/eventMap';
 import type { GameLoop } from '@/core/loop';
 import type { SceneView } from '@/render/scene';
+import type { ThirdPersonCamera } from '@/camera/ThirdPersonCamera';
+import { combatConfig } from '@/config/combat';
+import { enemyConfig } from '@/config/enemy';
+import { feedbackConfig } from '@/config/feedback';
+import { debugConfig } from '@/config/debug';
 
 /**
  * Panel de tuning. Regla 4 de CLAUDE.md: todo numero de gameplay se expone aqui.
  * Solo se monta en dev; en produccion esta funcion no se importa siquiera.
  */
-export function createDebugGui(loop: GameLoop, view: SceneView): GUI {
+export function createDebugGui(
+  loop: GameLoop,
+  view: SceneView,
+  thirdPerson: ThirdPersonCamera,
+): GUI {
   const gui = new GUI({ title: 'Debug — epic_fights' });
   gui.close();
 
@@ -64,6 +73,48 @@ export function createDebugGui(loop: GameLoop, view: SceneView): GUI {
   camera.add(cameraConfig, 'collisionRadius', 0.05, 1, 0.05).name('radio de colision');
   camera.add(cameraConfig, 'followSmoothing', 1, 60, 1).name('suavizado vertical');
 
+  const deflect = gui.addFolder('Deflect y postura');
+  deflect.add(combatConfig, 'deflectWindowTicks', 2, 24, 1).name('ventana (ticks)');
+  deflect.add(combatConfig, 'perfectDeflectTicks', 0, 12, 1).name('perfecto (ticks)');
+  deflect.add(combatConfig, 'deflectSpamPenaltyTicks', 0, 8, 1).name('castigo spam');
+  deflect.add(combatConfig, 'deflectMinWindowTicks', 1, 12, 1).name('ventana minima');
+  deflect.add(combatConfig, 'deflectSpamResetTicks', 5, 90, 1).name('olvido del spam');
+  deflect.add(combatConfig, 'deflectReflectPostureFactor', 0, 2, 0.05).name('postura al atacante');
+  deflect
+    .add(combatConfig, 'perfectDeflectReflectPostureFactor', 0, 3, 0.05)
+    .name('postura (perfecto)');
+  deflect.add(combatConfig, 'postureRegenPerTick', 0, 1, 0.01).name('regeneracion/tick');
+  deflect.add(combatConfig, 'postureRegenDelayTicks', 0, 120, 1).name('pausa regeneracion');
+  deflect.add(combatConfig, 'postureBrokenTicks', 30, 300, 5).name('ventana de remate');
+
+  const hitstop = gui.addFolder('Hitstop (ticks)').close();
+  hitstop.add(combatConfig, 'hitstopPerfectDeflect', 0, 15, 1).name('deflect perfecto');
+  hitstop.add(combatConfig, 'hitstopDeflect', 0, 15, 1).name('deflect');
+  hitstop.add(combatConfig, 'hitstopBlock', 0, 15, 1).name('bloqueo');
+  hitstop.add(combatConfig, 'hitstopHit', 0, 15, 1).name('golpe');
+  hitstop.add(combatConfig, 'hitstopPostureBreak', 0, 30, 1).name('postura rota');
+
+  const enemy = gui.addFolder('Duelista').close();
+  enemy.add(enemyConfig, 'pauseScale', 0.2, 3, 0.05).name('pausa entre combos x');
+  enemy.add(enemyConfig, 'telegraphLeadTicks', 0, 30, 1).name('aviso (ticks antes)');
+  enemy.add(enemyConfig, 'attackRange', 1.5, 5, 0.1).name('alcance para atacar');
+  enemy.add(enemyConfig, 'counterAfterBlocks', 1, 6, 1).name('contraataca tras bloqueos');
+
+  const feel = gui.addFolder('Feedback').close();
+  feel.add(feedbackConfig.deflectPerfect, 'sparks', 0, 200, 1).name('chispas (perfecto)');
+  feel.add(feedbackConfig.deflect, 'sparks', 0, 200, 1).name('chispas (deflect)');
+  feel.add(feedbackConfig.deflectPerfect, 'shake', 0, 1, 0.01).name('sacudida (perfecto)');
+  feel.add(feedbackConfig.deflect, 'shake', 0, 1, 0.01).name('sacudida (deflect)');
+  feel.add(feedbackConfig.deflectPerfect, 'lightIntensity', 0, 200, 1).name('luz (perfecto)');
+  feel.add(feedbackConfig, 'hitStyle', ['ink', 'blood', 'none']).name('impactos');
+  feel.add(feedbackConfig, 'masterVolume', 0, 1, 0.05).name('volumen');
+  feel.add(renderConfig, 'bloom').name('bloom');
+  feel.add(renderConfig, 'bloomStrength', 0, 2, 0.05).name('bloom fuerza');
+
+  const tools = gui.addFolder('Debug').close();
+  tools.add(debugConfig, 'showHitboxes').name('hitboxes / hurtboxes');
+  tools.add(debugConfig, 'showCombatLog').name('log de combate');
+
   const physics = gui.addFolder('Fisica').close();
   physics.add(physicsConfig.gravity, 'y', -60, 0, 1).name('gravedad Y');
   physics.add(physicsConfig, 'debugWireframe').name('wireframe colliders');
@@ -73,8 +124,7 @@ export function createDebugGui(loop: GameLoop, view: SceneView): GUI {
     .add(renderConfig, 'fov', 30, 100, 1)
     .name('FOV')
     .onChange(() => {
-      view.camera.fov = renderConfig.fov;
-      view.camera.updateProjectionMatrix();
+      thirdPerson.setBaseFov(renderConfig.fov);
     });
   render
     .add(renderConfig, 'maxPixelRatio', 0.5, 3, 0.25)

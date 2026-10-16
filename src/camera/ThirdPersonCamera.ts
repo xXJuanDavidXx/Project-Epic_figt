@@ -19,6 +19,14 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
   private currentDistance = cameraConfig.distance;
   private smoothedPivotY: number | null = null;
 
+  // --- feedback de impacto (solo visual) ---
+  /** "Trauma" acumulado 0..1: la sacudida crece con su cuadrado. */
+  private trauma = 0;
+  private shakeTime = 0;
+  private readonly shakeBias = new THREE.Vector3();
+  private fovOffset = 0;
+  private baseFov: number;
+
   constructor(
     private readonly camera: THREE.PerspectiveCamera,
     private readonly rig: CameraRig,
@@ -27,6 +35,28 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
     private readonly ignoreCollider: RAPIER.Collider | null = null,
   ) {
     this.castShape = new Rapier.Ball(cameraConfig.collisionRadius);
+    this.baseFov = camera.fov;
+  }
+
+  /**
+   * Sacudida. `direction` (opcional) empuja la camara en la direccion del golpe:
+   * se siente de donde viene el impacto.
+   */
+  shake(amount: number, direction?: { x: number; z: number }): void {
+    this.trauma = Math.min(1, this.trauma + amount);
+    if (direction) {
+      this.shakeBias.set(direction.x, 0, direction.z).multiplyScalar(amount * 0.12);
+    }
+  }
+
+  /** Golpe de FOV: negativo = zoom de impacto, positivo = aturdimiento. */
+  punchFov(degrees: number): void {
+    this.fovOffset += degrees;
+  }
+
+  /** FOV base (cuando lo cambia el panel de debug). */
+  setBaseFov(fov: number): void {
+    this.baseFov = fov;
   }
 
   renderUpdate(ctx: FrameContext): void {
@@ -90,6 +120,40 @@ export class ThirdPersonCamera implements RenderUpdateSystem {
       this.pivot.y,
       this.pivot.z - Math.sin(yaw) * shoulder,
     );
+    this.applyImpactFeedback(ctx.frameDelta);
+  }
+
+  /** Sacudida con ruido suave (no aleatorio puro: aleatorio puro se ve como un fallo). */
+  private applyImpactFeedback(frameDelta: number): void {
+    // Tiempo real del frame: la sacudida sigue durante el hitstop (el mundo se congela, la camara no).
+    const dt = frameDelta > 0 ? frameDelta : 1 / 60;
+    this.shakeTime += dt;
+    if (this.trauma > 0.001) {
+      const power = this.trauma * this.trauma;
+      const t = this.shakeTime * 38;
+      const ox = (Math.sin(t * 1.13) + Math.sin(t * 2.71) * 0.5) * 0.09 * power;
+      const oy = (Math.sin(t * 1.37 + 1.7) + Math.sin(t * 3.11) * 0.5) * 0.07 * power;
+      const roll = Math.sin(t * 0.91 + 0.4) * 0.025 * power;
+      this.camera.translateX(ox);
+      this.camera.translateY(oy);
+      this.camera.position.addScaledVector(this.shakeBias, power);
+      this.camera.rotateZ(roll);
+      this.trauma = Math.max(0, this.trauma - dt * 2.4);
+    } else {
+      this.trauma = 0;
+      this.shakeBias.set(0, 0, 0);
+    }
+
+    if (Math.abs(this.fovOffset) > 0.01) {
+      this.fovOffset *= Math.exp(-dt * 11);
+    } else {
+      this.fovOffset = 0;
+    }
+    const fov = this.baseFov + this.fovOffset;
+    if (Math.abs(this.camera.fov - fov) > 1e-3) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 }
 
